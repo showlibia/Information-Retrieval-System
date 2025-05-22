@@ -15,7 +15,6 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not OPENAI_API_KEY:
     print("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
-    OPENAI_API_KEY = '***REMOVED***' 
 
 class InfoRetrievalSystem:
     def __init__(self):
