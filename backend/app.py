@@ -1,3 +1,4 @@
+# backend/app.py
 import os
 from flask import Flask, request, jsonify, session
 from werkzeug.utils import secure_filename
@@ -22,19 +23,20 @@ def allowed_file(filename):
 def upload_pdf():
     if 'pdf_file' not in request.files:
         return jsonify({'error': 'No file part'}), 400
-    
+
     file = request.files['pdf_file']
     if file.filename == '':
         return jsonify({'error': 'No selected file'}), 400
-    
+
     if file and allowed_file(file.filename):
         filename = secure_filename(file.filename)
         filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
         file.save(filepath)
-        
+
         try:
             retrieval_system.process_pdf(filepath)
             session['processed_pdf_path'] = filepath
+            print(f"PDF processed and session set: {session.get('processed_pdf_path')}") # Debug print
             return jsonify({'message': f'PDF "{filename}" processed successfully!', 'success': True}), 200
         except Exception as e:
             print(f"Error processing PDF: {e}")
@@ -47,35 +49,38 @@ def upload_pdf():
 @app.route('/query', methods=['POST'])
 def query_pdf():
     if 'processed_pdf_path' not in session:
+        print("Session 'processed_pdf_path' not found.") # Debug print
         return jsonify({'error': 'No PDF has been processed yet. Please upload a PDF first.'}), 400
 
     data = request.get_json()
     user_query = data.get('query')
+    use_llm = data.get('use_llm', False)
 
     if not user_query:
         return jsonify({'error': 'No query provided'}), 400
 
     try:
-        # 选择查询类型
-        query_type = retrieval_system.select_query_type(user_query)
-        print(f"Selected query type: {query_type}")  # 调试输出
+        top_chunks = retrieval_system.retrieve_and_score_all(user_query, top_n=5)
 
-        # 检索相关内容
-        retrieved_chunks = retrieval_system.retrieve(user_query, query_type=query_type)
+        answer = ""
+        if use_llm:
+            if top_chunks:
+                answer = retrieval_system.generate_answer(user_query, top_chunks)
+            else:
+                answer = "No relevant information found for LLM to generate an answer."
+        else:
+            answer = "LLM generation is off. Showing top relevant chunks."
 
-        if not retrieved_chunks:
-            return jsonify({'answer': 'No relevant information found in the document.', 'chunks': []})
 
-        # 生成答案
-        answer = retrieval_system.generate_answer(user_query, retrieved_chunks)
-
-        # 格式化检索结果
         formatted_chunks = [
             {
                 'text': chunk['text'],
-                'doc': chunk['metadata'].get('doc', 'unknown'),
-                'page': chunk['metadata'].get('page', 'unknown')
-            } for chunk in retrieved_chunks
+                'doc': chunk['metadata'].get('original_doc', 'unknown'),
+                'page': chunk['metadata'].get('page_num', 'unknown'),
+                'sentence_index': chunk['metadata'].get('sentence_idx_in_page', 'unknown'),
+                'score': round(chunk.get('score', 0.0), 2),
+                'query_method': chunk.get('query_method', 'N/A')
+            } for chunk in top_chunks
         ]
 
         return jsonify({'answer': answer, 'chunks': formatted_chunks}), 200
