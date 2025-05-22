@@ -1,0 +1,53 @@
+/* frontend/src/App.css */
+/* Keep these for global container and section styling */
+.container {
+  max-width: 800px;
+  /* Managed by MUI Container maxWidth="md" but still good to have */
+  margin: 20px auto;
+  /* background-color: #fff; <- Removed, handled by MUI Box */
+  /* padding: 30px; <- Removed, handled by MUI Box */
+  /* border-radius: 8px; <- Removed, handled by MUI Box */
+  /* box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1); <- Removed, handled by MUI Box */
+}
+
+/* Original section styles are mostly replaced by MUI Box styling in App.js */
+/* .section {
+  margin-bottom: 25px;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  background-color: #fafafa;
+} */
+
+
+/* Styles for the status messages, applied via className */
+.status-message.success {
+  background-color: #d4edda;
+  color: #155724;
+  border: 1px solid #c3e6cb;
+}
+
+.status-message.error {
+  background-color: #f8d7da;
+  color: #721c24;
+  border: 1px solid #f5c6cb;
+}
+
+.status-message.loading {
+  background-color: #e2e3e5;
+  color: #383d41;
+  border: 1px solid #d6d8db;
+  font-style: italic;
+}
+
+/* Specific styling for markdown output if needed */
+#answer-display p {
+  margin-bottom: 0.5em;
+  /* Adjust paragraph spacing in markdown */
+}
+
+#answer-display ul,
+#answer-display ol {
+  margin-left: 1.5em;
+  /* Indent lists */
+}
