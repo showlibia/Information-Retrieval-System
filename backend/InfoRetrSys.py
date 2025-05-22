@@ -1,4 +1,3 @@
-# backend/InfoRetrSys.py
 import re
 import os
 from collections import defaultdict
@@ -16,13 +15,12 @@ OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 
 if not OPENAI_API_KEY:
     print("OpenAI API key not found. Please set the OPENAI_API_KEY environment variable.")
-    OPENAI_API_KEY = '***REMOVED***'
 
 class InfoRetrievalSystem:
     def __init__(self):
-        self.inverted_index = defaultdict(lambda: defaultdict(list))  # term -> {doc_id: [positions]}
-        self.doc_texts = {}  # doc_id -> original text
-        self.doc_freq = defaultdict(int)  # term -> number of documents containing term
+        self.inverted_index = defaultdict(lambda: defaultdict(list))
+        self.doc_texts = {}
+        self.doc_freq = defaultdict(int)
         self.total_docs = 0
         self.stop_words = set(stopwords.words('english'))
         self.stemmer = PorterStemmer()
@@ -65,6 +63,7 @@ class InfoRetrievalSystem:
                     self.doc_freq[token] += 1
                     unique_terms_in_doc.add(token)
 
+    # Format chunk for standardized output
     def format_chunk(self, doc_id, score=None, query_method="Global Search"):
         """Create a standardized chunk dictionary with metadata."""
         page_num = int(doc_id.split("_")[1])
@@ -76,7 +75,7 @@ class InfoRetrievalSystem:
             "doc_id": doc_id,
             "text": self.doc_texts[doc_id],
             "metadata": metadata,
-            "query_methods": [query_method] # Store query methods in a list
+            "query_methods": [query_method]
         }
         if score is not None:
             chunk["score"] = score
@@ -86,30 +85,23 @@ class InfoRetrievalSystem:
         term_count_in_doc = len(self.inverted_index[term][doc_id]) if doc_id in self.inverted_index[term] else 0
         total_terms_in_doc = len(self.preprocess_text(doc_id, self.doc_texts[doc_id]))
         tf = term_count_in_doc / total_terms_in_doc if total_terms_in_doc > 0 else 0
-
         df = self.doc_freq[term]
         idf = math.log(self.total_docs / (df + 1)) if df > 0 else 0
-
         return tf * idf
 
     def compute_wf_idf(self, term, doc_id):
         term_count_in_doc = len(self.inverted_index[term][doc_id]) if doc_id in self.inverted_index[term] else 0
         wf = 1 + math.log(term_count_in_doc) if term_count_in_doc > 0 else 0
-
         df = self.doc_freq[term]
         idf = math.log(self.total_docs / (df + 1)) if df > 0 else 0
-
         return wf * idf
 
+    # Compute relevance score for a chunk
     def compute_score_for_chunk(self, chunk, query_tokens, scoring_method="tf_idf"):
-        """
-        Compute the relevance score for a chunk based on query tokens.
-        scoring_method: 'tf_idf', 'wf_idf', or 'combined'
-        """
+        """Compute the relevance score for a chunk based on query tokens. scoring_method: 'tf_idf', 'wf_idf', or 'combined'"""
         score = 0.0
         doc_id = chunk["doc_id"]
         unique_query_tokens = set(query_tokens)
-
         for term in unique_query_tokens:
             if scoring_method == "tf_idf":
                 score += self.compute_tf_idf(term, doc_id)
@@ -121,8 +113,6 @@ class InfoRetrievalSystem:
                 score += (tf_idf_score + wf_idf_score) / 2
             else:
                 score += self.compute_tf_idf(term, doc_id)
-
-        # Scale the score to make it more visible/higher
         return score * 1000
 
     def global_search(self, query_tokens):
@@ -143,14 +133,12 @@ class InfoRetrievalSystem:
         results = []
         if not query_tokens:
             return []
-
         candidate_docs = set(self.inverted_index[query_tokens[0]].keys())
         for term in query_tokens[1:]:
             if term in self.inverted_index:
                 candidate_docs.intersection_update(self.inverted_index[term].keys())
             else:
                 return []
-
         for doc_id in candidate_docs:
             term_positions_in_doc = []
             all_terms_present = True
@@ -162,7 +150,6 @@ class InfoRetrievalSystem:
                     break
             if not all_terms_present:
                 continue
-
             first_term_positions = term_positions_in_doc[0]
             for start_pos in first_term_positions:
                 match = True
@@ -177,7 +164,7 @@ class InfoRetrievalSystem:
 
     def wildcard_query(self, query):
         pattern = query.lower().replace("*", ".*")
-        results = set() # Use a set to store unique doc_ids
+        results = set()
         for term in self.inverted_index:
             if re.match(pattern, term):
                 for doc_id in self.inverted_index[term]:
@@ -188,7 +175,6 @@ class InfoRetrievalSystem:
         parts = query.lower().split()
         stemmed_parts = [self.stemmer.stem(p) for p in parts if p not in ["and", "or", "not"]]
         result_doc_ids = set()
-
         if "and" in parts:
             terms = [self.stemmer.stem(t) for t in parts if t not in ["and", "or", "not"]]
             doc_sets = [set(self.inverted_index[term].keys()) for term in terms if term in self.inverted_index]
@@ -208,27 +194,21 @@ class InfoRetrievalSystem:
             else:
                 positive_terms = [self.stemmer.stem(p) for p in parts if p not in ["and", "or", "not"] and parts[parts.index(p) - 1] != "not"]
                 negative_terms = [self.stemmer.stem(parts[i+1]) for i, p in enumerate(parts) if p == "not"]
-
                 temp_docs = set(self.doc_texts.keys())
-
                 if positive_terms:
                     positive_doc_sets = [set(self.inverted_index[term].keys()) for term in positive_terms if term in self.inverted_index]
                     if positive_doc_sets:
                         temp_docs = set.intersection(*positive_doc_sets)
                     else:
                         temp_docs = set()
-
                 for term in negative_terms:
                     if term in self.inverted_index:
                         docs_with_negative_term = set(self.inverted_index[term].keys())
                         temp_docs = temp_docs - docs_with_negative_term
-
                 result_doc_ids.update(temp_docs)
         else:
             pass
-
         return [self.format_chunk(doc_id, query_method="Boolean Query") for doc_id in result_doc_ids]
-
 
     def synonym_query(self, query_tokens):
         expanded_terms = set(query_tokens)
@@ -239,111 +219,70 @@ class InfoRetrievalSystem:
                     stemmed_lemma = self.stemmer.stem(lemma.name())
                     if stemmed_lemma.isalnum() and stemmed_lemma not in self.stop_words:
                         expanded_terms.add(stemmed_lemma)
-
-        results = set() # Use a set to store unique doc_ids
+        results = set()
         for term in expanded_terms:
             if term in self.inverted_index:
                 for doc_id in self.inverted_index[term]:
                     results.add(doc_id)
         return [self.format_chunk(doc_id, query_method="Synonym Query") for doc_id in results]
 
-
+    # Retrieve and score chunks using multiple query methods
     def retrieve_and_score_all(self, query, top_n=5, scoring_method="tf_idf"):
         query_tokens = self.preprocess_text("query", query)
-        
-        # Store chunks from each method individually, before consolidation
         all_raw_chunks_by_method = defaultdict(list)
-        
         all_raw_chunks_by_method["Global Search"] = self.global_search(query_tokens)
         all_raw_chunks_by_method["Phrase Query"] = self.phrase_query(query_tokens)
         all_raw_chunks_by_method["Wildcard Query"] = self.wildcard_query(query)
         all_raw_chunks_by_method["Boolean Query"] = self.boolean_query(query)
         all_raw_chunks_by_method["Synonym Query"] = self.synonym_query(query_tokens)
-
-        # Consolidated chunks for overall ranking (unique by doc_id)
         consolidated_chunks_map = defaultdict(lambda: {
             "doc_id": None,
             "text": None,
             "metadata": {},
-            "query_methods": set(), # Use a set to automatically handle unique methods
+            "query_methods": set(),
             "score": 0.0
         })
-
-        # Process all raw chunks for consolidation and initial scoring
         for method, chunks_list in all_raw_chunks_by_method.items():
             for chunk in chunks_list:
                 doc_id = chunk['doc_id']
-                
-                # Initialize chunk_data if not already present
                 if consolidated_chunks_map[doc_id]["doc_id"] is None:
                     consolidated_chunks_map[doc_id]["doc_id"] = doc_id
                     consolidated_chunks_map[doc_id]["text"] = chunk['text']
                     consolidated_chunks_map[doc_id]["metadata"] = chunk['metadata']
-                
-                # Add the method to the set of methods that found this doc_id
                 consolidated_chunks_map[doc_id]["query_methods"].add(method)
-
-        # Convert consolidated map to a list and compute final scores
         scored_final_results = []
         for doc_id, chunk_data in consolidated_chunks_map.items():
-            # Convert query_methods set to list for consistent output
-            chunk_data['query_methods'] = sorted(list(chunk_data['query_methods'])) # Sort for consistent order
-            
+            chunk_data['query_methods'] = sorted(list(chunk_data['query_methods']))
             chunk_score = self.compute_score_for_chunk(chunk_data, query_tokens, scoring_method)
             chunk_data['score'] = chunk_score
             scored_final_results.append(chunk_data)
-
-        # Sort all unique and scored chunks by score in descending order
         sorted_results = sorted(scored_final_results, key=lambda x: x['score'], reverse=True)
-
-        # Determine the top N overall chunks
         top_n_overall_chunks = sorted_results[:top_n]
         top_n_doc_ids = {chunk['doc_id'] for chunk in top_n_overall_chunks}
-
-        # Prepare chunks for "Other Retrieval Methods" accordion
-        # These are chunks that were found by a method, but DID NOT make it into the top N overall.
         other_method_chunks = []
-        all_processed_doc_ids = set() # Track all doc_ids already added to other_method_chunks
-        
-        # Iterate through raw chunks by method to find those not in top_n_overall_chunks
+        all_processed_doc_ids = set()
         for method, chunks_list in all_raw_chunks_by_method.items():
-            # Get up to a few chunks per method that are not in the top N
-            # and haven't already been added to other_method_chunks (to avoid excessive duplicates in accordion)
             method_specific_chunks = []
             for chunk in chunks_list:
                 if chunk['doc_id'] not in top_n_doc_ids and chunk['doc_id'] not in all_processed_doc_ids:
-                    # Recompute score for these specific chunks for display purposes if needed,
-                    # or reuse the score from the consolidated map if it exists.
-                    # For simplicity, let's look up the score from consolidated_chunks_map
-                    # to keep scoring consistent.
                     original_consolidated_chunk = consolidated_chunks_map.get(chunk['doc_id'])
                     if original_consolidated_chunk:
                         chunk['score'] = original_consolidated_chunk['score']
-                        chunk['query_methods'] = original_consolidated_chunk['query_methods'] # Use consolidated methods
+                        chunk['query_methods'] = original_consolidated_chunk['query_methods']
                     else:
-                        # Fallback for score/methods if somehow not in consolidated map (shouldn't happen with current logic)
                         chunk['score'] = self.compute_score_for_chunk(chunk, query_tokens, scoring_method)
-
                     method_specific_chunks.append(chunk)
-                    all_processed_doc_ids.add(chunk['doc_id']) # Mark as processed for accordion
-                # Limit to prevent accordion from becoming too long, e.g., max 3 unique chunks per method
+                    all_processed_doc_ids.add(chunk['doc_id'])
                 if len(method_specific_chunks) >= 3:
                     break
             other_method_chunks.extend(method_specific_chunks)
-
-        # Ensure text_preview is added to all chunks being returned
         for chunk in top_n_overall_chunks:
             chunk['text_preview'] = chunk['text'][:500] + "..." if len(chunk['text']) > 500 else chunk['text']
-
         for chunk in other_method_chunks:
             chunk['text_preview'] = chunk['text'][:500] + "..." if len(chunk['text']) > 500 else chunk['text']
-            
         return top_n_overall_chunks, other_method_chunks
 
-    def select_query_type(self, query):
-        """This method is deprecated as all query types are now run and combined."""
-        return "global" # Placeholder return
-
+    # Generate answer using LLM
     def generate_answer(self, query, chunks):
         """Generate an answer using ChatGPT based on retrieved chunks."""
         context = "\n".join([chunk["text_preview"] for chunk in chunks])

@@ -1,4 +1,3 @@
-# backend/app.py
 import os
 from flask import Flask, request, jsonify, session
 from werkzeug.utils import secure_filename
@@ -9,7 +8,7 @@ app = Flask(__name__)
 CORS(app, supports_credentials=True)
 
 app.config['SECRET_KEY'] = 'KFC_V_ME_50'
-app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['UPLOAD_FOLDER'] = 'Uploads'
 app.config['ALLOWED_EXTENSIONS'] = {'pdf'}
 
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -36,7 +35,7 @@ def upload_pdf():
         try:
             retrieval_system.process_pdf(filepath)
             session['processed_pdf_path'] = filepath
-            print(f"PDF processed and session set: {session.get('processed_pdf_path')}") # Debug print
+            print(f"PDF processed and session set: {session.get('processed_pdf_path')}")
             return jsonify({'message': f'PDF "{filename}" processed successfully!', 'success': True}), 200
         except Exception as e:
             print(f"Error processing PDF: {e}")
@@ -49,7 +48,7 @@ def upload_pdf():
 @app.route('/query', methods=['POST'])
 def query_pdf():
     if 'processed_pdf_path' not in session:
-        print("Session 'processed_pdf_path' not found.") # Debug print
+        print("Session 'processed_pdf_path' not found.")
         return jsonify({'error': 'No PDF has been processed yet. Please upload a PDF first.'}), 400
 
     data = request.get_json()
@@ -62,7 +61,6 @@ def query_pdf():
         return jsonify({'error': 'No query provided'}), 400
 
     try:
-        # Retrieve both top_chunks and other_method_chunks
         top_chunks, other_method_chunks = retrieval_system.retrieve_and_score_all(user_query, top_n=top_n, scoring_method=scoring_method)
 
         answer = ""
@@ -74,8 +72,6 @@ def query_pdf():
         else:
             answer = "LLM generation is off. Showing top relevant chunks."
 
-
-        # Format top_chunks for frontend display
         formatted_top_chunks = [
             {
                 'text': chunk['text_preview'],
@@ -88,7 +84,6 @@ def query_pdf():
             } for chunk in top_chunks
         ]
 
-        # Format other_method_chunks for frontend display
         formatted_other_method_chunks = [
             {
                 'text': chunk['text_preview'],
@@ -103,8 +98,8 @@ def query_pdf():
 
         return jsonify({
             'answer': answer,
-            'chunks': formatted_top_chunks, # Renamed for clarity
-            'other_method_chunks': formatted_other_method_chunks # New field for accordion
+            'chunks': formatted_top_chunks,
+            'other_method_chunks': formatted_other_method_chunks
         }), 200
     except Exception as e:
         print(f"Error during query: {e}")
